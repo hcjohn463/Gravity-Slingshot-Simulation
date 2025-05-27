@@ -27,7 +27,7 @@ class SlingshotWithTarget:
         
         # Target zone in the upper right area
         self.target_center = np.array([4e7, 3e7], dtype=float)  # 40M km right, 30M km up
-        self.target_radius = 5e6  # 5M km radius
+        self.target_radius = 4e6  # 4M km radius
         self.target_hit = False
         self.target_hit_time = None
         
@@ -144,34 +144,26 @@ class SlingshotWithTarget:
         self.spacecraft_speeds.append(np.linalg.norm(self.spacecraft_vel))
         self.spacecraft_directions.append(np.arctan2(self.spacecraft_vel[1], self.spacecraft_vel[0]))
     
-    def run_simulation(self, max_steps=300):
-        """Run simulation with step limit"""
+    def run_simulation(self, max_steps=100):
+        """Run simulation with fixed step limit"""
         print("Running slingshot with target simulation...")
         
         for step in range(max_steps):
             self.update_physics()
             
-            # Check if we should stop
-            distance = np.linalg.norm(self.spacecraft_pos - self.moon_pos)
-            
-            # Stop if target hit
-            if self.target_hit:
-                print(f"🎯 Simulation stopped - Target achieved at step {step}!")
-                break
-            
-            # Stop if spacecraft is getting very far
-            if distance > 2e8:  # 200 million km
-                print(f"Spacecraft distance too large. Stopping at step {step}")
-                break
-                
             # Progress reporting
             if step % 20 == 0:
+                distance = np.linalg.norm(self.spacecraft_pos - self.moon_pos)
                 dist_km = distance / 1000
                 speed_kms = self.spacecraft_speeds[-1] / 1000
                 target_dist = np.linalg.norm(self.spacecraft_pos - self.target_center) / 1000
                 print(f"Step {step}: Distance = {dist_km:.0f} km, Speed = {speed_kms:.2f} km/s, Target dist = {target_dist:.0f} km")
         
         print(f"Simulation finished! Total steps: {len(self.spacecraft_trajectory)}")
+        if self.target_hit:
+            print(f"🎯 Target was hit during simulation!")
+        else:
+            print(f"❌ Target was not hit during simulation")
     
     def analyze_slingshot(self):
         """Analyze the slingshot results"""
@@ -257,7 +249,27 @@ class SlingshotWithTarget:
         ax.set_xlim(x_center - plot_range/2, x_center + plot_range/2)
         ax.set_ylim(y_center - plot_range/2, y_center + plot_range/2)
         ax.set_aspect('equal')
-        ax.set_title('Slingshot with Target Challenge', fontsize=20, color='white', pad=20)
+        
+        # Create mixed color title
+        result_text = "Success" if self.target_hit else "Fail"
+        title_color = 'lime' if self.target_hit else 'red'
+        
+        # Calculate the full title for positioning
+        full_title = f'Slingshot with Target Challenge - {result_text}'
+        
+        # Main title text in white (center aligned)
+        ax.text(0.5, 1.02, 'Slingshot with Target Challenge - ', 
+                transform=ax.transAxes, fontsize=16, weight='bold',
+                horizontalalignment='center', verticalalignment='bottom',
+                color='white')
+        
+        # Calculate position for the result text to align properly
+        # Position it right after the dash
+        ax.text(0.71, 1.02, result_text, 
+                transform=ax.transAxes, fontsize=16, weight='bold',
+                horizontalalignment='left', verticalalignment='bottom',
+                color=title_color)
+        
         ax.set_xlabel('Distance (10 Million km)', fontsize=14, color='white')
         ax.set_ylabel('Distance (10 Million km)', fontsize=14, color='white')
         ax.grid(True, alpha=0.3, color='gray')
@@ -324,38 +336,6 @@ class SlingshotWithTarget:
         spacecraft_velocity = ax.annotate('', xy=(0, 0), xytext=(0, 0),
                                          arrowprops=dict(arrowstyle='->', color='lime', 
                                                        lw=4, alpha=1.0), zorder=9)
-        
-        # Create legend manually
-        legend_elements = []
-        
-        if self.moon_image is None:
-            legend_elements.append(plt.Line2D([0], [0], marker='o', color='w', 
-                                            markerfacecolor='lightgray', markersize=10, label='Moon'))
-        else:
-            legend_elements.append(plt.Line2D([0], [0], marker='s', color='w', 
-                                            markerfacecolor='lightgray', markersize=10, label='Moon'))
-            
-        if self.spacecraft_image is None:
-            legend_elements.append(plt.Line2D([0], [0], marker='o', color='w', 
-                                            markerfacecolor='white', markersize=10, label='Spacecraft'))
-        else:
-            legend_elements.append(plt.Line2D([0], [0], marker='s', color='w', 
-                                            markerfacecolor='white', markersize=10, label='Spacecraft'))
-            
-        legend_elements.extend([
-            plt.Line2D([0], [0], color='gray', linewidth=3, label='Moon Path'),
-            plt.Line2D([0], [0], color='cyan', linewidth=4, label='Spacecraft Path'),
-        ])
-        
-        # Add target legend based on whether flag image is available
-        if self.flag_image is not None:
-            legend_elements.append(plt.Line2D([0], [0], marker='s', color='w', 
-                                            markerfacecolor=target_color, markersize=10, label='Target Flag'))
-        else:
-            legend_elements.append(plt.Line2D([0], [0], marker='o', color='w', 
-                                            markerfacecolor=target_color, markersize=10, label='Target Zone'))
-        
-        ax.legend(handles=legend_elements, loc='upper left', fontsize=12, framealpha=0.9)
         
         # Status display
         status_display = ax.text(0.02, 0.98, '', transform=ax.transAxes, 
@@ -484,7 +464,7 @@ def main():
     print(f"{'='*60}")
     
     # Run simulation
-    sim.run_simulation(max_steps=300)
+    sim.run_simulation(max_steps=100)
     
     # Analyze results
     results = sim.analyze_slingshot()
