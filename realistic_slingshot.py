@@ -3,7 +3,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from matplotlib.patches import Circle
+from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 import math
+import os
+from PIL import Image
 
 class RealisticSlingshot:
     def __init__(self):
@@ -17,10 +20,14 @@ class RealisticSlingshot:
         self.moon_pos = np.array([0, 0], dtype=float)
         self.moon_vel = np.array([1200, 0], dtype=float)  # Faster moon for better slingshot
         
-        # Spacecraft parameters - optimized for realistic slingshot
+        # Spacecraft parameters - optimized for realistic slingshot from behind
         self.spacecraft_mass = 1000
-        self.spacecraft_pos = np.array([-2e7, -1.5e7], dtype=float)  # Closer approach
-        self.spacecraft_vel = np.array([2800, 1800], dtype=float)  # Optimized for escape
+        self.spacecraft_pos = np.array([2.5e7, -1.5e7], dtype=float)  # Right-bottom position
+        self.spacecraft_vel = np.array([-3200, 2000], dtype=float)  # Flying left-up to catch moon from behind
+        
+        # Load custom images if available
+        self.moon_image = self.load_image('moon.png', 'moon.jpg', 'moon.jpeg')
+        self.spacecraft_image = self.load_image('spacecraft.png', 'spacecraft.jpg', 'spacecraft.jpeg', 'spaceship.png')
         
         # Data recording
         self.moon_trajectory = [self.moon_pos.copy()]
@@ -39,6 +46,17 @@ class RealisticSlingshot:
         print(f"Escape velocity at initial distance ({initial_distance/1000:.0f} km): {self.escape_velocity/1000:.2f} km/s")
         print(f"Initial speed: {np.linalg.norm(self.spacecraft_vel)/1000:.2f} km/s")
         print(f"Sufficient for escape: {'Yes' if np.linalg.norm(self.spacecraft_vel) > self.escape_velocity else 'No'}")
+        
+        # Print image status
+        if self.moon_image is not None:
+            print("✅ Moon image loaded successfully")
+        else:
+            print("ℹ️ Using default moon circle (no moon image found)")
+            
+        if self.spacecraft_image is not None:
+            print("✅ Spacecraft image loaded successfully")
+        else:
+            print("ℹ️ Using default spacecraft dot (no spacecraft image found)")
     
     def calculate_escape_velocity(self, distance):
         """Calculate escape velocity at given distance"""
@@ -189,10 +207,33 @@ class RealisticSlingshot:
         
         # Create visual elements
         moon_size = 0.25
-        moon_circle = Circle((0, 0), moon_size, color='lightgray', alpha=0.9, 
-                           label='Moon', zorder=10)
-        spacecraft_dot, = ax1.plot([], [], 'o', color='white', markersize=12, 
-                                 label='Spacecraft', zorder=11)
+        
+        # Moon visual element
+        if self.moon_image is not None:
+            # Use custom moon image
+            moon_img = OffsetImage(self.moon_image, zoom=0.06)
+            moon_visual = AnnotationBbox(moon_img, (0, 0), frameon=False, zorder=10)
+            ax1.add_artist(moon_visual)
+            moon_circle = None  # No circle needed
+        else:
+            # Use default circle
+            moon_circle = Circle((0, 0), moon_size, color='lightgray', alpha=0.9, 
+                               label='Moon', zorder=10)
+            ax1.add_patch(moon_circle)
+            moon_visual = moon_circle
+        
+        # Spacecraft visual element
+        if self.spacecraft_image is not None:
+            # Use custom spacecraft image
+            spacecraft_img = OffsetImage(self.spacecraft_image, zoom=0.05)
+            spacecraft_visual = AnnotationBbox(spacecraft_img, (0, 0), frameon=False, zorder=11)
+            ax1.add_artist(spacecraft_visual)
+            spacecraft_dot = None  # No dot needed
+        else:
+            # Use default dot
+            spacecraft_dot, = ax1.plot([], [], 'o', color='white', markersize=12, 
+                                     label='Spacecraft', zorder=11)
+            spacecraft_visual = spacecraft_dot
         
         # Path trails
         moon_path, = ax1.plot([], [], color='gray', alpha=0.7, linewidth=3, 
@@ -213,15 +254,35 @@ class RealisticSlingshot:
         speed_chart, = ax2.plot([], [], color='orange', linewidth=4, alpha=0.9)
         current_speed_marker, = ax2.plot([], [], 'o', color='red', markersize=10, zorder=10)
         
-        ax1.add_patch(moon_circle)
-        ax1.legend(loc='upper right', fontsize=14, framealpha=0.9)
-        
         # Status display
         status_display = ax1.text(0.02, 0.98, '', transform=ax1.transAxes, 
                                 color='lime', fontsize=14, weight='bold',
                                 verticalalignment='top',
                                 bbox=dict(boxstyle="round,pad=0.6", facecolor='black', 
                                         alpha=0.8, edgecolor='lime', linewidth=2))
+        
+        # Create legend manually
+        legend_elements = []
+        if self.moon_image is None:
+            legend_elements.append(plt.Line2D([0], [0], marker='o', color='w', 
+                                            markerfacecolor='lightgray', markersize=10, label='Moon'))
+        else:
+            legend_elements.append(plt.Line2D([0], [0], marker='s', color='w', 
+                                            markerfacecolor='lightgray', markersize=10, label='Moon'))
+            
+        if self.spacecraft_image is None:
+            legend_elements.append(plt.Line2D([0], [0], marker='o', color='w', 
+                                            markerfacecolor='white', markersize=10, label='Spacecraft'))
+        else:
+            legend_elements.append(plt.Line2D([0], [0], marker='s', color='w', 
+                                            markerfacecolor='white', markersize=10, label='Spacecraft'))
+            
+        legend_elements.extend([
+            plt.Line2D([0], [0], color='gray', linewidth=3, label='Moon Path'),
+            plt.Line2D([0], [0], color='orange', linewidth=4, label='Spacecraft Path')
+        ])
+        
+        ax1.legend(handles=legend_elements, loc='upper right', fontsize=14, framealpha=0.9)
         
         def animate(frame):
             if frame >= len(moon_traj):
@@ -232,8 +293,15 @@ class RealisticSlingshot:
             spacecraft_x, spacecraft_y = spacecraft_traj[frame]
             
             # Update positions
-            moon_circle.center = (moon_x, moon_y)
-            spacecraft_dot.set_data([spacecraft_x], [spacecraft_y])
+            if self.moon_image is not None:
+                moon_visual.xybox = (moon_x, moon_y)
+            else:
+                moon_circle.center = (moon_x, moon_y)
+                
+            if self.spacecraft_image is not None:
+                spacecraft_visual.xybox = (spacecraft_x, spacecraft_y)
+            else:
+                spacecraft_dot.set_data([spacecraft_x], [spacecraft_y])
             
             # Update paths
             moon_path.set_data(moon_traj[:frame+1, 0], moon_traj[:frame+1, 1])
@@ -282,9 +350,21 @@ class RealisticSlingshot:
                 f'Frame: {frame+1}/{len(moon_traj)}'
             )
             
-            return [moon_circle, spacecraft_dot, moon_path, spacecraft_path,
-                   moon_velocity, spacecraft_velocity, speed_chart, 
-                   current_speed_marker, status_display]
+            # Return all animated elements
+            animated_elements = [moon_path, spacecraft_path, moon_velocity, spacecraft_velocity, 
+                               speed_chart, current_speed_marker, status_display]
+            
+            if self.moon_image is not None:
+                animated_elements.append(moon_visual)
+            else:
+                animated_elements.append(moon_circle)
+                
+            if self.spacecraft_image is not None:
+                animated_elements.append(spacecraft_visual)
+            else:
+                animated_elements.append(spacecraft_dot)
+                
+            return animated_elements
         
         # Create animation
         total_frames = min(len(moon_traj), 400)
@@ -297,6 +377,21 @@ class RealisticSlingshot:
         
         plt.tight_layout()
         return fig, anim
+    
+    def load_image(self, *filenames):
+        """Try to load image from multiple possible filenames"""
+        for filename in filenames:
+            if os.path.exists(filename):
+                try:
+                    img = Image.open(filename)
+                    # Convert to RGBA if not already
+                    if img.mode != 'RGBA':
+                        img = img.convert('RGBA')
+                    return np.array(img)
+                except Exception as e:
+                    print(f"Warning: Could not load {filename}: {e}")
+                    continue
+        return None
 
 def main():
     print("🚀 Realistic Gravity Slingshot Simulation")
